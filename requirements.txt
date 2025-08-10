@@ -1,0 +1,15 @@
+# requirements.txt
+# Python dependencies
+
+torch
+transformers
+opencv-python
+numpy
+matplotlib
+scikit-learn
+tqdm
+pyYAML
+streamlit
+seaborn
+pillow
+plotly
