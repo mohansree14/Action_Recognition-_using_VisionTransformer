@@ -1,0 +1,37 @@
+MODEL COMPARISON REPORT
+==================================================
+
+Evaluation Date: 20250809_160340
+Models Evaluated: TIMESFORMER, VIT, SLOWFAST
+
+ACCURACY SUMMARY:
+------------------------------
+TIMESFORMER:
+  Top-1 Accuracy: 90.00%
+  Top-5 Accuracy: 96.40%
+  Training Epochs: 5
+  Training Val Acc: 0.805
+
+VIT:
+  Top-1 Accuracy: 67.60%
+  Top-5 Accuracy: 88.40%
+  Training Epochs: 11
+  Training Val Acc: 0.656
+
+SLOWFAST:
+  Top-1 Accuracy: 88.00%
+  Top-5 Accuracy: 96.00%
+  Training Epochs: 4
+  Training Val Acc: 0.758
+
+RANKINGS:
+------------------------------
+Top-1 Accuracy Ranking:
+  1. TIMESFORMER: 90.00%
+  2. SLOWFAST: 88.00%
+  3. VIT: 67.60%
+
+Top-5 Accuracy Ranking:
+  1. TIMESFORMER: 96.40%
+  2. SLOWFAST: 96.00%
+  3. VIT: 88.40%
