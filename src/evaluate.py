@@ -22,9 +22,10 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AutoFeatureExtractor
 import sys
+import argparse
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.vit_model import get_timesformer_model, get_vit_model, get_slowfast_model
+from models.vit_model import get_timesformer_model, get_vit_model, get_videomae_model
 from dataset import HMDBDataset
 import yaml
 import numpy as np
@@ -44,8 +45,8 @@ def ensure_results_directory():
     os.makedirs(base_results_dir, exist_ok=True)
     
     # Create subdirectories if they don't exist
-    subdirs = ["timesformer_evaluation", "vit_evaluation", "slowfast_evaluation", 
-               "model_comparison", "timesformer_model", "vit_model", "slowfast_model"]
+    subdirs = ["timesformer_evaluation", "vit_evaluation", "videomae_evaluation", 
+               "model_comparison", "timesformer_model", "vit_model", "videomae_model"]
     
     for subdir in subdirs:
         os.makedirs(os.path.join(base_results_dir, subdir), exist_ok=True)
@@ -559,18 +560,32 @@ def create_advanced_visualizations(all_labels, all_preds, all_logits, categories
 
 def load_model_checkpoint(model_path, model_type, num_classes, device):
     """Load trained model from checkpoint"""
-    # Initialize model architecture
+    # Load checkpoint first to get actual number of classes
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    # Try to determine num_classes from checkpoint
+    actual_num_classes = num_classes
+    if 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+        # Check classifier layer to get actual number of classes
+        if 'classifier.weight' in state_dict:
+            actual_num_classes = state_dict['classifier.weight'].shape[0]
+        elif 'head.weight' in state_dict:
+            actual_num_classes = state_dict['head.weight'].shape[0]
+    
+    print(f"Checkpoint trained with {actual_num_classes} classes, current config has {num_classes} classes")
+    
+    # Initialize model architecture with actual number of classes from checkpoint
     if model_type == "timesformer":
-        model = get_timesformer_model(num_classes=num_classes)
+        model = get_timesformer_model(num_classes=actual_num_classes)
     elif model_type == "vit":
-        model = get_vit_model(num_classes=num_classes)
-    elif model_type == "slowfast":
-        model = get_slowfast_model(num_classes=num_classes)
+        model = get_vit_model(num_classes=actual_num_classes)
+    elif model_type == "videomae":
+        model = get_videomae_model(num_classes=actual_num_classes)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
     
     # Load checkpoint
-    checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
     model.eval()
@@ -581,7 +596,7 @@ def load_model_checkpoint(model_path, model_type, num_classes, device):
     
     return model, checkpoint
 
-def evaluate_model(model_type="timesformer", use_processed=True):
+def evaluate_model(model_type="timesformer", use_processed=True, model_path=None):
     # Ensure results directory structure exists
     ensure_results_directory()
     
@@ -589,14 +604,30 @@ def evaluate_model(model_type="timesformer", use_processed=True):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # Find and load the best trained model
-    try:
-        model_path, config_path, metrics_path = find_best_model(model_type)
-        print(f"Found model files for {model_type.upper()}")
-    except FileNotFoundError as e:
-        print(f"ERROR: {e}")
-        print(f"Please train the {model_type} model first using: python train.py {model_type}")
-        return
+    # Find and load the best trained model, or use provided path
+    config_path = None
+    metrics_path = None
+    if model_path is None:
+        try:
+            model_path, config_path, metrics_path = find_best_model(model_type)
+            print(f"Found model files for {model_type.upper()}")
+        except FileNotFoundError as e:
+            print(f"ERROR: {e}")
+            print(f"Please train the {model_type} model first using: python train.py {model_type}")
+            return
+    else:
+        if not os.path.exists(model_path):
+            print(f"ERROR: Provided model path does not exist: {model_path}")
+            return
+        print(f"Using provided model checkpoint: {model_path}")
+        # Try to find config and metrics in the same directory as the model
+        model_dir = os.path.dirname(model_path)
+        config_candidates = [f for f in os.listdir(model_dir) if f.endswith('.json') and 'config' in f]
+        metrics_candidates = [f for f in os.listdir(model_dir) if f.endswith('.json') and 'metrics' in f]
+        if config_candidates:
+            config_path = os.path.join(model_dir, config_candidates[0])
+        if metrics_candidates:
+            metrics_path = os.path.join(model_dir, metrics_candidates[0])
     
     # Load configuration
     if config_path and os.path.exists(config_path):
@@ -616,10 +647,21 @@ def evaluate_model(model_type="timesformer", use_processed=True):
     original_data_path = config['dataset']['root_dir']
     processed_data_path = os.path.join("results", "HMDB_simp_processed")
     
-    # If we have training config, use the same dataset path that was used during training
+    # If we have training config, check if the training dataset path exists locally
     if training_config and 'dataset_path' in training_config:
-        dataset_path = training_config['dataset_path']
-        print(f"USING TRAINING DATASET PATH: {dataset_path}")
+        training_dataset_path = training_config['dataset_path']
+        if os.path.exists(training_dataset_path):
+            dataset_path = training_dataset_path
+            print(f"USING TRAINING DATASET PATH: {dataset_path}")
+        else:
+            print(f"Training dataset path not found: {training_dataset_path}")
+            # Fall back to local processed or original data
+            if use_processed and os.path.exists(processed_data_path):
+                dataset_path = processed_data_path
+                print(f"FALLING BACK TO PROCESSED DATASET: {os.path.abspath(dataset_path)}")
+            else:
+                dataset_path = original_data_path
+                print(f"FALLING BACK TO ORIGINAL DATASET: {dataset_path}")
     elif use_processed and os.path.exists(processed_data_path):
         dataset_path = processed_data_path
         print(f"USING PROCESSED DATASET: {os.path.abspath(dataset_path)}")
@@ -631,9 +673,13 @@ def evaluate_model(model_type="timesformer", use_processed=True):
     model, checkpoint = load_model_checkpoint(model_path, model_type, len(categories), device)
     
     # Create test dataset (using test split for true evaluation - prevents overfitting assessment)
-    test_dataset = HMDBDataset(root_dir=dataset_path, categories=categories, mode='test', use_processed=False)
+    # Determine if we're using processed data based on the dataset path
+    using_processed_data = 'processed' in dataset_path.lower()
+    test_dataset = HMDBDataset(root_dir=dataset_path, categories=categories, mode='test', use_processed=using_processed_data)
     test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'], shuffle=False, pin_memory=True)
     
+    print(f"Dataset path: {dataset_path}")
+    print(f"Using processed data: {using_processed_data}")
     print(f"Evaluating on {len(test_dataset)} test samples")
     
     # Load feature extractor
@@ -677,7 +723,13 @@ def evaluate_model(model_type="timesformer", use_processed=True):
             # Store results
             all_preds.extend(predictions.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
-            all_logits.extend(outputs.logits.cpu().numpy())
+            
+            # Store logits properly to maintain 2D shape
+            batch_logits = outputs.logits.cpu().numpy()
+            if len(all_logits) == 0:
+                all_logits = batch_logits
+            else:
+                all_logits = np.vstack([all_logits, batch_logits])
             
             if batch_idx % 10 == 0:
                 print(f"   Processed batch {batch_idx}/{len(test_loader)}")
@@ -694,29 +746,43 @@ def evaluate_model(model_type="timesformer", use_processed=True):
     try:
         from sklearn.metrics import top_k_accuracy_score
         
-        # Get unique classes in test data
-        unique_classes = np.unique(all_labels)
-        n_test_classes = len(unique_classes)
-        n_model_classes = all_logits.shape[1]
-        
-        print(f"   Test data classes: {n_test_classes}, Model classes: {n_model_classes}")
-        
-        # If we have class mismatch, we need to align the logits
-        if n_test_classes != n_model_classes:
-            print(f"   Adjusting for class mismatch...")
-            # Create a mapping from test classes to model classes
-            aligned_logits = np.zeros((len(all_labels), n_test_classes))
-            for i, class_idx in enumerate(unique_classes):
-                if class_idx < n_model_classes:
-                    aligned_logits[:, i] = all_logits[:, class_idx]
-            
-            # Remap labels to align with the reduced logits
-            label_mapping = {old_label: new_label for new_label, old_label in enumerate(unique_classes)}
-            aligned_labels = np.array([label_mapping[label] for label in all_labels])
-            
-            top5_accuracy = top_k_accuracy_score(aligned_labels, aligned_logits, k=min(5, n_test_classes))
+        # Check if all_logits is properly formed
+        if len(all_logits) == 0:
+            print("   Warning: No logits collected, skipping advanced metrics")
+            top5_accuracy = 0.0
         else:
-            top5_accuracy = top_k_accuracy_score(all_labels, all_logits, k=5)
+            # Ensure all_logits has proper 2D shape
+            if all_logits.ndim == 1 and len(all_logits) > 0:
+                # If it's 1D, try to reshape or skip
+                print(f"   Warning: all_logits shape is {all_logits.shape}, skipping top-k accuracy")
+                top5_accuracy = 0.0
+            elif all_logits.ndim == 2:
+                # Get unique classes in test data
+                unique_classes = np.unique(all_labels)
+                n_test_classes = len(unique_classes)
+                n_model_classes = all_logits.shape[1]
+                
+                print(f"   Test data classes: {n_test_classes}, Model classes: {n_model_classes}")
+                
+                # If we have class mismatch, we need to align the logits
+                if n_test_classes != n_model_classes:
+                    print(f"   Adjusting for class mismatch...")
+                    # Create a mapping from test classes to model classes
+                    aligned_logits = np.zeros((len(all_labels), n_test_classes))
+                    for i, class_idx in enumerate(unique_classes):
+                        if class_idx < n_model_classes:
+                            aligned_logits[:, i] = all_logits[:, class_idx]
+                    
+                    # Remap labels to align with the reduced logits
+                    label_mapping = {old_label: new_label for new_label, old_label in enumerate(unique_classes)}
+                    aligned_labels = np.array([label_mapping[label] for label in all_labels])
+                    
+                    top5_accuracy = top_k_accuracy_score(aligned_labels, aligned_logits, k=min(5, n_test_classes))
+                else:
+                    top5_accuracy = top_k_accuracy_score(all_labels, all_logits, k=5)
+            else:
+                print(f"   Warning: Unexpected all_logits shape {all_logits.shape}")
+                top5_accuracy = 0.0
             
     except (ImportError, ValueError) as e:
         print(f"   Sklearn top-k error: {e}")
@@ -786,6 +852,11 @@ def evaluate_model(model_type="timesformer", use_processed=True):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     eval_dir = os.path.join("results", f"{model_type}_evaluation")
     os.makedirs(eval_dir, exist_ok=True)
+    
+    # Check if we have any samples to evaluate
+    if len(all_labels) == 0 or len(all_preds) == 0:
+        print("ERROR: No samples to evaluate. Check dataset path and data availability.")
+        return None
     
     # Generate confusion matrix
     cm = confusion_matrix(all_labels, all_preds)
@@ -993,7 +1064,7 @@ def evaluate_all_models(use_processed=True):
     print("Starting comprehensive evaluation of all models")
     print("="*70)
     
-    model_types = ["timesformer", "vit", "slowfast"]
+    model_types = ["timesformer", "vit", "videomae"]
     all_results = {}
     successful_evaluations = []
     
@@ -1367,47 +1438,41 @@ def create_model_comparison_visualizations(all_results, comparison_dir, timestam
     }
 
 if __name__ == "__main__":
-    import sys
-    
-    # Check if user wants to evaluate all models
-    if len(sys.argv) > 1 and sys.argv[1].lower() == 'all':
-        use_processed = True
-        if len(sys.argv) > 2:
-            use_processed = sys.argv[2].lower() == 'true'
-        
-        print(f"Starting evaluation for ALL MODELS")
-        print(f"Use processed data: {use_processed}")
-        print("="*70)
-        
-        try:
-            comparison_results = evaluate_all_models(use_processed)
+        parser = argparse.ArgumentParser(description="Evaluate a trained action recognition model.")
+        parser.add_argument("model_type", type=str, nargs="?", default="timesformer", help="Model type to evaluate (e.g., timesformer, vit, videomae)")
+        parser.add_argument("use_processed", type=str, nargs="?", default="True", help="Whether to use processed data (True/False)")
+        parser.add_argument("--model-path", type=str, default=None, help="Path to a specific model checkpoint (.pth) file")
+        args = parser.parse_args()
+
+        if args.model_type.lower() == 'all':
+            use_processed = args.use_processed.lower() == 'true'
+            print(f"Starting evaluation for ALL MODELS")
+            print(f"Use processed data: {use_processed}")
             print("="*70)
-            print(f"All model evaluations completed successfully!")
-        except Exception as e:
-            print(f"ERROR: Evaluation failed with error: {str(e)}")
-            raise
-    else:
-        # Single model evaluation
-        model_type = "timesformer"
-        use_processed = True
-        
-        if len(sys.argv) > 1:
-            model_type = sys.argv[1].lower()
-        if len(sys.argv) > 2:
-            use_processed = sys.argv[2].lower() == 'true'
-        
-        print(f"Starting evaluation for model: {model_type.upper()}")
-        print(f"Use processed data: {use_processed}")
-        print("="*60)
-        
-        try:
-            results = evaluate_model(model_type, use_processed)
-            if results:
-                print("="*60)
-                print(f"Evaluation completed successfully!")
-                print(f"Final Accuracy: {results['metrics']['top1_accuracy']*100:.2f}%")
-            else:
-                print("ERROR: Evaluation failed - model not found or not trained")
-        except Exception as e:
-            print(f"ERROR: Evaluation failed with error: {str(e)}")
-            raise
+            try:
+                comparison_results = evaluate_all_models(use_processed)
+                print("="*70)
+                print(f"All model evaluations completed successfully!")
+            except Exception as e:
+                print(f"ERROR: Evaluation failed with error: {str(e)}")
+                raise
+        else:
+            model_type = args.model_type.lower()
+            use_processed = args.use_processed.lower() == 'true'
+            model_path = args.model_path
+            print(f"Starting evaluation for model: {model_type.upper()}")
+            print(f"Use processed data: {use_processed}")
+            if model_path:
+                print(f"Using custom model path: {model_path}")
+            print("="*60)
+            try:
+                results = evaluate_model(model_type, use_processed, model_path=model_path)
+                if results:
+                    print("="*60)
+                    print(f"Evaluation completed successfully!")
+                    print(f"Final Accuracy: {results['metrics']['top1_accuracy']*100:.2f}%")
+                else:
+                    print("ERROR: Evaluation failed - model not found or not trained")
+            except Exception as e:
+                print(f"ERROR: Evaluation failed with error: {str(e)}")
+                raise
