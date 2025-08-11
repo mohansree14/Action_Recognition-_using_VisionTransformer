@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from models.vit_model import get_timesformer_model, get_vit_model, get_slowfast_model
+from models.vit_model import get_timesformer_model, get_vit_model, get_videomae_model
 from dataset import HMDBDataset
 import yaml
 
@@ -66,7 +66,7 @@ def validate_model(model, val_loader, device, extractor, model_type="timesformer
                 # ViT: Pass video data directly to model
                 inputs = {"pixel_values": pixel_values}
             else:
-                # TimeSFormer/SlowFast: Convert to numpy for video feature extractor
+                # TimeSFormer/VideoMAE: Convert to numpy for video feature extractor
                 videos_numpy = []
                 pixel_values_cpu = pixel_values.cpu()
                 for video in pixel_values_cpu:
@@ -249,15 +249,15 @@ def train_model(model_type="timesformer", use_processed=True, config_file=None,
         extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
         print(f"Loaded ViT image feature extractor")
     else:
-        # TimeSFormer and SlowFast use video feature extractor
+        # TimeSFormer and VideoMAE use video feature extractor
         extractor = AutoFeatureExtractor.from_pretrained(config['model']['model_name'])
         print(f"Loaded video feature extractor: {config['model']['model_name']}")
     if model_type == "timesformer":
         model = get_timesformer_model(num_classes=len(categories))
     elif model_type == "vit":
         model = get_vit_model(num_classes=len(categories))
-    elif model_type == "slowfast":
-        model = get_slowfast_model(num_classes=len(categories))
+    elif model_type == "videomae":
+        model = get_videomae_model(num_classes=len(categories))
     else:
         raise ValueError(f"Unknown model type: {model_type}")
     
@@ -477,7 +477,7 @@ def train_model(model_type="timesformer", use_processed=True, config_file=None,
                 # ViT: Pass video data directly to model, it will handle frame selection
                 inputs = {"pixel_values": pixel_values}
             else:
-                # TimeSFormer/SlowFast: Convert to numpy for video feature extractor
+                # TimeSFormer/VideoMAE: Convert to numpy for video feature extractor
                 # Feature extractor expects: [batch_size, num_frames, height, width, channels]
                 videos_numpy = []
                 pixel_values_cpu = pixel_values.cpu()  # Move to CPU once for numpy conversion
@@ -662,7 +662,7 @@ if __name__ == "__main__":
     # Check if we're using old-style positional arguments or new-style arguments
     using_old_style = (len(sys.argv) > 1 and 
                       not sys.argv[1].startswith('-') and 
-                      sys.argv[1] in ['timesformer', 'vit', 'slowfast'])
+                      sys.argv[1] in ['timesformer', 'vit', 'videomae'])
     
     if using_old_style:
         # Old style: python train.py timesformer true [config_file]
@@ -690,7 +690,7 @@ if __name__ == "__main__":
         # New style: python train.py --model timesformer --lr 0.001
         parser = argparse.ArgumentParser(description='Train video classification models')
         parser.add_argument('--model', type=str, default='timesformer', 
-                           choices=['timesformer', 'vit', 'slowfast'],
+                           choices=['timesformer', 'vit', 'videomae'],
                            help='Model to train')
         parser.add_argument('--use-processed', type=str, default='true',
                            help='Use processed dataset (true/false)')
