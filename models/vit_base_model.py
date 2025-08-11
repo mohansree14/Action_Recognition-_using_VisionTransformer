@@ -13,9 +13,16 @@ class VideoViTModel(nn.Module):
         # Load pre-trained ViT model for image classification
         self.vit_model = AutoModelForImageClassification.from_pretrained(
             "google/vit-base-patch16-224",
-            num_labels=num_classes,
             ignore_mismatched_sizes=True
         )
+        # Replace the classifier layer with the correct number of classes
+        self.vit_model.classifier = nn.Linear(
+            self.vit_model.classifier.in_features, 
+            num_classes
+        )
+        # Update the num_labels attribute to match our classes
+        self.vit_model.num_labels = num_classes
+        self.vit_model.config.num_labels = num_classes
         self.num_classes = num_classes
         
     def forward(self, pixel_values, labels=None, **kwargs):
