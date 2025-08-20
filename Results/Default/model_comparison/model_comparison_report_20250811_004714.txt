@@ -1,0 +1,37 @@
+MODEL COMPARISON REPORT
+==================================================
+
+Evaluation Date: 20250811_004714
+Models Evaluated: TIMESFORMER, VIT, VIDEOMAE
+
+ACCURACY SUMMARY:
+------------------------------
+TIMESFORMER:
+  Top-1 Accuracy: 76.80%
+  Top-5 Accuracy: 94.40%
+  Training Epochs: 6
+  Training Val Acc: 0.750
+
+VIT:
+  Top-1 Accuracy: 62.00%
+  Top-5 Accuracy: 88.80%
+  Training Epochs: 7
+  Training Val Acc: 0.703
+
+VIDEOMAE:
+  Top-1 Accuracy: 69.60%
+  Top-5 Accuracy: 93.20%
+  Training Epochs: 8
+  Training Val Acc: 0.648
+
+RANKINGS:
+------------------------------
+Top-1 Accuracy Ranking:
+  1. TIMESFORMER: 76.80%
+  2. VIDEOMAE: 69.60%
+  3. VIT: 62.00%
+
+Top-5 Accuracy Ranking:
+  1. TIMESFORMER: 94.40%
+  2. VIDEOMAE: 93.20%
+  3. VIT: 88.80%

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 streamlit
 opencv-python
 Pillow
@@ -5,3 +6,12 @@ matplotlib
 torch
 transformers
 yaml
+=======
+streamlit
+opencv-python
+Pillow
+matplotlib
+torch
+transformers
+yaml
+>>>>>>> 28d1049ffd1c191af8331bacb7e4645904ca6e5a
