@@ -1,22 +1,5 @@
 # evaluate.py
 # Evaluation metrics: accuracy, confusion matrix, top-5 analysis
-# 
-# OUTPUT STRUCTURE:
-# results/
-# ├── {model_type}_evaluation/           # Individual model evaluation results
-# │   ├── {model}_evaluation_results_{timestamp}.json
-# │   ├── {model}_evaluation_{timestamp}.log
-# │   └── {model}_confusion_matrix_{timestamp}.png
-# ├── model_comparison/                  # Cross-model comparison results
-# │   ├── model_comparison_results_{timestamp}.json
-# │   ├── model_comparison_report_{timestamp}.txt
-# │   ├── accuracy_comparison_{timestamp}.png
-# │   ├── per_class_heatmap_{timestamp}.png
-# │   └── performance_summary_{timestamp}.png
-# └── {model_type}_model/                # Trained model checkpoints (from training)
-#     ├── {model}_best_model_{timestamp}.pth
-#     ├── {model}_training_config_{timestamp}.json
-#     └── {model}_metrics_{timestamp}.json
 
 import torch
 from torch.utils.data import DataLoader
